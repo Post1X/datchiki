@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Мониторинг датчиков</title>
+    <link rel="preconnect" href="https://cdn.socket.io" />
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous"></script>
+    <style>
+      :root { --ok:#1f9d55; --warn:#c27803; --crit:#e02424; --fg:#0f172a; --muted:#64748b; --bg:#f8fafc; }
+      * { box-sizing: border-box; }
+      body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; color:var(--fg); background:var(--bg); }
+      header { padding:16px 20px; border-bottom:1px solid #e2e8f0; background:#fff; position:sticky; top:0; z-index:1; }
+      header h1 { margin:0; font-size:18px; }
+      main { max-width:1240px; margin:0 auto; padding:20px; }
+      .status { display:flex; gap:12px; align-items:center; margin:12px 0 20px; color:var(--muted); }
+      .dot { width:10px; height:10px; border-radius:50%; background:#cbd5e1; }
+      .dot.ok { background:var(--ok); }
+      .dot.warn { background:var(--warn); }
+      .dot.crit { background:var(--crit); }
+      .layout { display:grid; grid-template-columns: 320px 1fr; gap:16px; align-items:start; }
+      .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:12px; }
+      .card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px; box-shadow:0 1px 1px rgba(0,0,0,.02); }
+      .card h3 { margin:0 0 8px; font-size:14px; font-weight:600; }
+      .kpis { display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; }
+      .kpi { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:12px; }
+      .kpi .label { font-size:12px; color:var(--muted); }
+      .kpi .value { font-size:20px; font-weight:700; margin-top:6px; }
+      .kv { display:flex; justify-content:space-between; font-size:13px; margin:2px 0; }
+      .mini { height:60px; }
+      .spark { display:flex; gap:2px; align-items:flex-end; height:60px; }
+      .bar { width:4px; background:#cbd5e1; border-radius:2px 2px 0 0; }
+      .bar.last.ok { background: var(--ok); }
+      .bar.last.warn { background: var(--warn); }
+      .bar.last.crit { background: var(--crit); }
+      .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:2px 8px; font-size:12px; border:1px solid #e2e8f0; }
+      .pill.ok { color:var(--ok); border-color:var(--ok); }
+      .pill.warn { color:var(--warn); border-color:var(--warn); }
+      .pill.crit { color:var(--crit); border-color:var(--crit); }
+      footer { text-align:center; color:var(--muted); font-size:12px; padding:20px; }
+      .ts { font-variant-numeric: tabular-nums; font-size:12px; color:var(--muted); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Мониторинг датчиков</h1>
+    </header>
+    <main>
+      <div class="status"><span id="conn-dot" class="dot"></span><span id="conn-text">Отключено</span></div>
+      <div id="last-update" class="ts">—</div>
+      <div class="layout">
+        <div>
+          <div class="kpis">
+            <div class="kpi"><div class="label">Аварии</div><div id="kpi-critical" class="value">0</div></div>
+            <div class="kpi"><div class="label">Внимание</div><div id="kpi-warning" class="value">0</div></div>
+            <div class="kpi"><div class="label">Норма</div><div id="kpi-normal" class="value">0</div></div>
+            <div class="kpi"><div class="label">Датчики</div><div id="kpi-count" class="value">0</div></div>
+          </div>
+          <div style="height:16px"></div>
+          <div id="grid" class="grid"></div>
+        </div>
+        <div>
+          <div class="card">
+            <h3>Per-Sensor Bars</h3>
+            <div id="charts" class="grid"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+    <footer>Socket source: /alerts · event: sensors:update</footer>
+    <script src="./app.js"></script>
+  </body>
+  </html>
+
+
