@@ -11,6 +11,7 @@ interface Sensor {
   unit?: string;
   critical: boolean;
   risk_probability?: number;
+  severity?: 'normal' | 'warning' | 'critical';
 }
 
 @Injectable()
@@ -31,13 +32,11 @@ export class SensorsService implements OnModuleInit {
   async onModuleInit() {
     console.log('[NEST-BOOT] SensorsService initialized');
 
-    if (process.env.SIMULATION_ENABLED === '1') {
-      setInterval(async () => {
-        const sensors = await this.simulateSensors();
-        console.log(`[NEST-SIM-EMIT] count=${sensors.length}`);
-        this.alertsGateway.emit('sensors:update', sensors);
-      }, 10000); 
-    }
+    setInterval(async () => {
+      const sensors = await this.simulateSensors();
+      console.log(`[NEST-SIM-EMIT] count=${sensors.length}`);
+      this.alertsGateway.emit('sensors:update', sensors);
+    }, 3000); 
   }
 
   async simulateSensors(): Promise<Sensor[]> {
@@ -59,6 +58,7 @@ export class SensorsService implements OnModuleInit {
         max: s.max,
         unit: s.unit,
         critical,
+        severity,
         risk_probability: prob,
       } as Sensor;
     });

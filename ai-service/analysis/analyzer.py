@@ -55,23 +55,23 @@ class RiskAnalyzer:
             return resp('warning', 0.4)
 
         if s_id == 'oil_pressure' and isinstance(value, (int, float)):
-            # Without load flag, use broad safe band 2.5–5.0, warn near edges, critical below 2.0 or above 6.0
+            # Норма 2.5–5.0; предупреждение рядом с границами; критика только при явных выходах
             if 2.5 <= value <= 5.0:
                 return resp('normal', 0.06)
             if (2.0 <= value < 2.5) or (5.0 < value <= 6.0):
-                return resp('warning', 0.55)
-            if value < 2.0 or value > 6.0:
+                return resp('warning', 0.5)
+            if value < 1.5 or value > 7.0:
                 return resp('critical', 0.9)
-            return resp('warning', 0.5)
+            return resp('warning', 0.6)
 
         if s_id == 'fuel_pressure' and isinstance(value, (int, float)):
             if 2.5 <= value <= 5.0:
                 return resp('normal', 0.06)
             if (2.0 <= value < 2.5) or (5.0 < value <= 6.0):
-                return resp('warning', 0.55)
-            if value < 2.0 or value > 6.0:
+                return resp('warning', 0.5)
+            if value < 1.8 or value > 7.0:
                 return resp('critical', 0.9)
-            return resp('warning', 0.5)
+            return resp('warning', 0.6)
 
         if s_id == 'fuel_level' and isinstance(value, (int, float)):
             if value >= 30:
@@ -81,12 +81,20 @@ class RiskAnalyzer:
             return resp('critical', 0.9)
 
         if s_id == 'fuel_consumption' and isinstance(value, (int, float)):
-            # Without load profile, treat high absolute values as risky; better would be trend-based vs power.
-            if value <= 40:
-                return resp('normal', 0.08)
-            if value <= 60:
-                return resp('warning', 0.55)
-            return resp('critical', 0.9)
+            # Контекст нагрузки по RPM: до ~1300 считаем низкой/средней, выше — высокой
+            rpm = self.prev_frame.get('rpm')
+            if isinstance(rpm, (int, float)) and rpm >= 1300:
+                if value <= 120:
+                    return resp('normal', 0.08)
+                if value <= 140:
+                    return resp('warning', 0.55)
+                return resp('critical', 0.9)
+            else:
+                if value <= 40:
+                    return resp('normal', 0.08)
+                if value <= 60:
+                    return resp('warning', 0.55)
+                return resp('critical', 0.9)
 
         if s_id == 'voltage' and isinstance(value, (int, float)):
             # 24V system typical
@@ -218,20 +226,20 @@ class RiskAnalyzer:
                 anomalies += 1
 
         ecu_errors_val = anomalies
-        ecu_errors_sev = 'normal' if anomalies == 0 else ('warning' if anomalies == 1 else 'critical')
+        # 0 — норм; 1–2 — внимание; >=3 — авария
+        ecu_errors_sev = 'normal' if anomalies == 0 else ('warning' if anomalies <= 2 else 'critical')
 
         # Fuel leak detection by fuel level drop beyond expected
         fuel_leak_val = None
         if isinstance(fuel_level_prev, (int, float)) and isinstance(fuel_level_now, (int, float)):
             drop = fuel_level_prev - fuel_level_now
-            # heuristic thresholds without tank capacity: allow ~0.2-0.5% per sec as normal
-            # penalize if consumption is small but drop is large
-            if drop > 2.0:
-                fuel_leak_val = True
-            elif drop > 0.8 and (cons is None or cons < 10):
-                fuel_leak_val = True
+            # более консервативные пороги: критично при >3%, предупреждение при >1.2% и малом расходе
+            if drop > 3.0:
+                fuel_leak_val = 'critical'
+            elif drop > 1.2 and (cons is None or cons < 10):
+                fuel_leak_val = 'warning'
             else:
-                fuel_leak_val = False
+                fuel_leak_val = 'normal'
         # if not enough data keep previous state if present
         if fuel_leak_val is None:
             prev_leak = prev.get('fuel_leak')
@@ -250,10 +258,11 @@ class RiskAnalyzer:
 
         # Emergency stop logic with auto-clear after stabilization
         emergency = self.emergency_active
-        extreme_oil = isinstance(oil_p, (int, float)) and oil_p < 1.5
-        extreme_temp = isinstance(cool_t, (int, float)) and cool_t >= 120
-        extreme_volt = isinstance(volt, (int, float)) and (volt < 22.5 or volt > 29.5)
-        extreme_vib = isinstance(vib, (int, float)) and vib > 5.0
+        # Сделать триггеры более строгими, чтобы избежать ложных срабатываний
+        extreme_oil = isinstance(oil_p, (int, float)) and oil_p < 1.0
+        extreme_temp = isinstance(cool_t, (int, float)) and cool_t >= 125
+        extreme_volt = isinstance(volt, (int, float)) and (volt < 22.0 or volt > 30.0)
+        extreme_vib = isinstance(vib, (int, float)) and vib > 6.5
         low_fuel = isinstance(fuel_level_now, (int, float)) and fuel_level_now < 15
         confirmed_leak = bool(fuel_leak_val)
         triggers = [extreme_oil, extreme_temp, extreme_volt, extreme_vib, (confirmed_leak and low_fuel)]
@@ -266,7 +275,7 @@ class RiskAnalyzer:
                 'oil_pressure', 'engine_temp_coolant', 'voltage', 'vibration', 'fuel_pressure')) and not confirmed_leak
             if all_normal:
                 self.emergency_clear_streak += 1
-                if self.emergency_clear_streak >= 5:
+                if self.emergency_clear_streak >= 2:
                     emergency = False
                     self.emergency_clear_streak = 0
             else:
@@ -298,7 +307,13 @@ class RiskAnalyzer:
                 enriched.append({ 'id': id_, 'type': id_, 'value': value, 'severity': severity, 'risk_probability': prob })
 
         set_or_add('ecu_errors', ecu_errors_val, ecu_errors_sev, 0.9 if ecu_errors_sev == 'critical' else (0.6 if ecu_errors_sev == 'warning' else 0.05))
-        set_or_add('fuel_leak', bool(fuel_leak_val), 'critical' if fuel_leak_val else 'normal', 0.97 if fuel_leak_val else 0.03)
+        # fuel_leak: различаем warning/critical
+        if fuel_leak_val == 'critical':
+            set_or_add('fuel_leak', True, 'critical', 0.97)
+        elif fuel_leak_val == 'warning':
+            set_or_add('fuel_leak', True, 'warning', 0.6)
+        else:
+            set_or_add('fuel_leak', False, 'normal', 0.03)
         set_or_add('overheat', bool(overheat_val), overheat_sev, 0.9 if overheat_sev == 'critical' else (0.6 if overheat_sev == 'warning' else 0.05))
         set_or_add('emergency_stop', bool(emergency), 'critical' if emergency else 'normal', 0.99 if emergency else 0.02)
 

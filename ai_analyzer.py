@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import os, sys
 # Make 'ai-service' modules importable despite hyphen in directory name
 sys.path.append(os.path.join(os.path.dirname(__file__), 'ai-service'))
-from simulation.simulator import ASLSimulator
+from simulation.simulator import RuleSimulator
 from simulation.webots_adapter import WebotsAdapter
 from analysis.analyzer import RiskAnalyzer
 from analysis.pysad_adapter import PySADAdapter
@@ -12,7 +12,7 @@ import requests
 app = Flask(__name__)
 webots = WebotsAdapter()
 pysad = PySADAdapter()
-sim = ASLSimulator()
+sim = RuleSimulator()
 analyzer = RiskAnalyzer()
 latest_ingested = None  # type: ignore
 SENSOR_MAPPING = {
@@ -54,10 +54,8 @@ else:
 @app.route('/simulate', methods=['GET'])
 def simulate():
     global latest_ingested
-    if latest_ingested:
-        sensors = latest_ingested
-    else:
-        sensors = sim_backend.step()
+    # Всегда используем внутренний симулятор (по задаче)
+    sensors = sim.step()
     try:
         if hasattr(analyzer_backend, 'analyze_frame'):
             analyzed = analyzer_backend.analyze_frame(sensors)

@@ -112,7 +112,8 @@
       for (let i = 0; i < c.bars.length; i++) {
         const h = Math.max(2, Math.round(58 * c.bars[i]));
         const el = document.createElement('div');
-        el.className = 'bar' + (i === c.bars.length - 1 ? (' last ' + (s.severity || (s.critical ? 'crit' : 'ok')).replace('critical','crit').replace('warning','warn').replace('normal','ok')) : '');
+        const sev = (s.severity || (s.critical ? 'critical' : 'normal'));
+        el.className = 'bar' + (i === c.bars.length - 1 ? (' last ' + sev.replace('critical','crit').replace('warning','warn').replace('normal','ok')) : '');
         el.style.height = h + 'px';
         frag.appendChild(el);
       }
